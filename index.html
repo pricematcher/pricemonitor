@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Сравнение цен</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💲</text></svg>">
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- External libs -->
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4.3.0/dist/exceljs.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="app-nav">
+  <a href="https://erofly83-arch.github.io/obrezatel/" target="_blank">✂️ Подготовить прайсы</a>
+  <a href="https://erofly83-arch.github.io/pricematcher/" class="nav-active">📊 Мониторинг</a>
+</nav>
+
+<!-- TAB BAR -->
+<div class="main-tab-bar">
+  <button class="main-tab active" data-main-tab="monitor" title="Мониторинг цен по штрихкодам">📊 Мониторинг цен</button>
+  <button class="main-tab" data-main-tab="matcher" title="Поиск совпадений по наименованию">🔍 Матчинг по наименованию</button>
+  <button class="main-tab" data-main-tab="jsoneditor" title="База синонимов штрихкодов и брендов">📚 База синонимов</button>
+  <div class="tab-spacer"></div>
+  <span id="unifiedUnsaved" class="unified-unsaved">● Не сохранено</span>
+  <button id="tutorialBtn" class="main-tab-help-btn" title="Включить режим обучения">🎓 Обучение</button>
+</div>
+
+<!-- ===== TAB 1: MONITORING ===== -->
+<div class="main-pane" id="pane-monitor">
+  <div class="container">
+    <div class="top-panel">
+      <!-- Upload: Synonyms -->
+      <div class="upload-card synonyms" title="База синонимов штрихкодов и брендов в формате JSON">
+        <label class="card-title">📚 Синонимы</label>
+        <div class="syn-json-btns">
+          <label class="upload-btn" for="synonymsInput" title="Загрузить файл синонимов .json">⬆️ Загрузить</label>
+          <input type="file" id="synonymsInput" accept=".json">
+          <button id="unifiedSaveJsonBtn" class="upload-btn" title="Скачать базу синонимов как .json">⬇️ Скачать</button>
+        </div>
+        <div id="synonymsStatus" class="upload-status upload-status--idle">Файл не загружен</div>
+      </div>
+      <!-- Upload: My price -->
+      <div class="upload-card my-price" title="Ваш собственный прайс-лист для сравнения">
+        <label class="card-title" for="myPriceInput">⭐ Мой прайс</label>
+        <label class="upload-btn" for="myPriceInput" title="Загрузить мой прайс (.csv, .xlsx, .xls)">📂 Выбрать файл</label>
+        <input type="file" id="myPriceInput" accept=".csv,.xlsx,.xls">
+        <div id="myPriceStatus" class="upload-status upload-status--idle">Файл не загружен</div>
+      </div>
+      <!-- Upload: Competitors -->
+      <div class="upload-card suppliers" title="Прайсы поставщиков для сравнения цен">
+        <label class="card-title" for="competitorInput">🏪 Прайсы поставщиков</label>
+        <label class="upload-btn" for="competitorInput" title="Загрузить прайсы поставщиков (можно несколько файлов)">📂 Выбрать файлы</label>
+        <input type="file" id="competitorInput" multiple accept=".csv,.xlsx,.xls">
+        <div id="competitorStatus" class="upload-status upload-status--idle">Файлы не загружены</div>
+      </div>
+      <!-- Info cards -->
+      <div class="info-card" title="Количество уникальных товаров по штрихкоду">
+        <div class="info-value" id="productCount">0</div>
+        <div class="info-label">Уникальных товаров</div>
+      </div>
+      <div class="info-card" title="Количество загруженных файлов прайсов">
+        <div class="info-value" id="fileCount">0</div>
+        <div class="info-label">Файлов загружено</div>
+      </div>
+      <div class="info-card" title="Количество колонок данных в таблице">
+        <div class="info-value" id="columnCount">0</div>
+        <div class="info-label">Колонок данных</div>
+      </div>
+      <div class="info-card" title="Количество товаров, встречающихся в нескольких файлах">
+        <div class="info-value" id="matchCount">0</div>
+        <div class="info-label">Совпадений по ШК</div>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <div class="controls-group">
+        <span class="controls-group-label">🔍 Фильтры</span>
+        <button class="ctrl-btn" id="sortMatchesBtn" disabled title="Показать только товары из нескольких файлов">🔄 Совпадения</button>
+        <button class="ctrl-btn" id="bigDiffBtn" disabled title="Показать товары с большой разницей цен (>10%)">📊 Большая разница</button>
+        <button class="ctrl-btn" id="showMyPriceBtn" disabled title="Показать только товары из моего прайса">⭐ Мой прайс</button>
+        <button class="ctrl-btn" id="maxCoverageBtn" disabled title="Показать товары из поставщиков, которых нет в моём прайсе (потенциальные новинки)">📊 Поиск новинок</button>
+        <button class="ctrl-btn" id="compactMatchesBtn" disabled title="Показать сжатый вид наименований">⊟ Компактный вид</button>
+      </div>
+      <div class="controls-group export-group">
+        <span class="controls-group-label">💾 Экспорт</span>
+        <button class="ctrl-btn export-btn" id="exportMyPriceBtn" disabled title="Экспортировать только товары из моего прайса в Excel">⭐💾 Мой прайс</button>
+        <button class="ctrl-btn export-btn" id="exportAllBtn" disabled title="Экспортировать все данные в Excel">💾 Всё</button>
+        <button class="ctrl-btn export-btn" id="exportCurrentBtn" disabled title="Экспортировать текущий отфильтрованный вид в Excel">🔍💾 Текущий вид</button>
+      </div>
+      <div class="controls-group danger-group">
+        <button class="ctrl-btn danger-btn" id="clearBtn" disabled title="Сбросить все данные и начать заново">🗑️ Сбросить всё</button>
+      </div>
+    </div>
+
+    <!-- Hidden columns -->
+    <div id="hiddenColumnsPanel" style="display:none;" class="hidden-columns">
+      <span class="hidden-columns-label">🔍 Скрытые колонки:</span>
+      <div id="hiddenColumnsList"></div>
+    </div>
+
+    <!-- Search -->
+    <div class="search-box">
+      <input type="text" id="searchInput" placeholder="🔍 Поиск по наименованию товара..." title="Фильтрация по любому наименованию из всех файлов">
+    </div>
+
+    <!-- Table -->
+    <div id="tableContainer">
+      <div class="empty-state">
+        <div class="empty-state-icon">📋</div>
+        <div class="empty-state-text">Загрузите прайс-листы для начала работы</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB 2: MATCHER ===== -->
+<div class="main-pane" id="pane-matcher" style="display:none;">
+  <div class="container">
+    <div class="matcher-toolbar">
+      <button id="matcherRunBtn" title="Запустить алгоритм матчинга по наименованию в фоновом потоке">▶️ Запустить матчинг</button>
+      <button id="matcherHideKnownBtn" class="ctrl-btn" title="Скрыть пары, для которых уже добавлен синоним ШК">👁 Скрыть известные</button>
+      <input type="text" id="matcherSearchInp" placeholder="🔍 Поиск по парам..." style="padding:5px 10px;font-size:12px;border:1px solid #ccc;border-radius:3px;width:240px;">
+    </div>
+    <div id="matcherFilesPanel" class="matcher-files-panel"></div>
+    <div class="matcher-stats" id="matcherStats">
+      <div class="mstat active" data-mv="all">
+        <div class="mstat-val" id="statAll">0</div>
+        <div class="mstat-lbl">Все пары</div>
+      </div>
+      <div class="mstat" data-mv="high">
+        <div class="mstat-val" id="statHigh">0</div>
+        <div class="mstat-lbl">≥80% высокие</div>
+      </div>
+      <div class="mstat" data-mv="med">
+        <div class="mstat-val" id="statMed">0</div>
+        <div class="mstat-lbl">52–79% средние</div>
+      </div>
+      <div class="mstat red" data-mv="unpaired">
+        <div class="mstat-val" id="statUnpaired">0</div>
+        <div class="mstat-lbl">Без пары</div>
+      </div>
+    </div>
+    <div id="matcherProgress" class="matcher-progress" style="display:none;">
+      <div style="font-size:11px;color:#888;margin-bottom:3px;" id="matcherProgressText">Обработка...</div>
+      <div class="progress-bar-wrap"><div class="progress-bar-inner" id="matcherProgressBar" style="width:0%"></div></div>
+    </div>
+    <div id="matcherUnpairedPanel" class="unpaired-panel" style="display:none;"></div>
+    <div id="matcherTableWrap" class="matcher-table-wrap">
+      <div class="empty-state"><div class="empty-state-icon">🔍</div><div class="empty-state-text">Загрузите файлы и нажмите «Запустить матчинг»</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== TAB 3: SYNONYM DB ===== -->
+<div class="main-pane" id="pane-jsoneditor" style="display:none;">
+  <div class="container">
+    <div class="syn-subtab-bar">
+      <button class="syn-subtab active" data-subtab="barcodes">🔢 Штрихкоды <span id="bcCountBadge" class="badge">0</span></button>
+      <button class="syn-subtab" data-subtab="brands">🏷️ Бренды <span id="brandCountBadge" class="badge">0</span></button>
+    </div>
+
+    <!-- Sub-pane: Barcodes -->
+    <div id="subpane-barcodes">
+      <div class="je-toolbar">
+        <button id="jeUndoBtn" title="Отменить (Ctrl+Z)">↩ Отмена</button>
+        <button id="jeRedoBtn" title="Повторить (Ctrl+Y)">↪ Повтор</button>
+        <button id="jeExportXlsxBtn" title="Экспорт базы ШК в Excel">📥 Excel</button>
+        <button id="jeImportXlsxBtn" title="Импорт базы ШК из Excel">📤 Импорт</button>
+        <button id="jeClearBtn" style="background:#fce8e6;border-color:#f5c6c6;color:#9b1c1c;" title="Полная очистка базы ШК">🗑 Очистить</button>
+        <span id="jeDupStatus" class="je-dup-status" style="display:none;"></span>
+      </div>
+      <div class="je-create-form">
+        <input name="name" id="jeNName" placeholder="Название товара" title="Название товара для этой группы ШК">
+        <input name="mainbc" id="jeNMainBC" placeholder="Главный ШК" title="Основной штрихкод (каноническое значение)">
+        <input name="syns" id="jeNSyns" placeholder="Синонимы через запятую" title="Штрихкоды-синонимы через запятую">
+        <button id="jeCreateBtn" class="ctrl-btn" style="background:var(--c-green);color:#fff;border-color:var(--c-green-dark);">➕ Создать группу</button>
+      </div>
+      <div class="je-search-row">
+        <input type="text" id="jeSearchInp" placeholder="🔍 Поиск по базе ШК...">
+        <span id="jeCountInfo" style="font-size:12px;color:#888;"></span>
+      </div>
+      <div class="je-table-wrap" id="jeTableWrap">
+        <table id="jeTable">
+          <thead><tr>
+            <th style="width:40px;">#</th>
+            <th>Название</th>
+            <th>Главный ШК</th>
+            <th>Синонимы</th>
+            <th style="width:40px;"></th>
+          </tr></thead>
+          <tbody id="jeTbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sub-pane: Brands -->
+    <div id="subpane-brands" style="display:none;">
+      <div class="brand-toolbar">
+        <button id="brandOpenAddModalBtn" title="Добавить новый бренд">➕ Добавить бренд</button>
+        <button id="brandClearAllBtn" style="background:#fce8e6;border-color:#f5c6c6;color:#9b1c1c;" title="Очистить всю базу брендов">🗑 Очистить</button>
+        <input type="text" id="brandSearchInp" placeholder="🔍 Поиск по брендам..." style="padding:5px 10px;font-size:12px;border:1px solid #ccc;border-radius:3px;width:240px;">
+      </div>
+      <div id="brandCardsList" class="brand-cards-wrap"></div>
+      <details id="brandAiDetails" class="brand-ai-section">
+        <summary>🤖 AI-генератор синонимов брендов</summary>
+        <div style="margin-top:10px;">
+          <div class="modal-field">
+            <label>Ваши бренды (по одному на строку):</label>
+            <textarea id="aiBrandsList" rows="4" style="width:100%;border:1px solid #ccc;border-radius:3px;padding:6px;font-size:12px;" placeholder="Tchibo&#10;Nescafe&#10;Jacobs"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;margin-bottom:8px;">
+            <button id="aiCopyPromptBtn" class="ctrl-btn">📋 Копировать промпт</button>
+            <button id="aiRefreshPromptBtn" class="ctrl-btn">🔄 Обновить промпт</button>
+          </div>
+          <textarea id="aiPromptBox" class="ai-prompt-box" readonly></textarea>
+          <div class="modal-field" style="margin-top:10px;">
+            <label>Вставьте JSON-ответ от AI:</label>
+            <textarea id="aiJsonInput" rows="5" style="width:100%;border:1px solid #ccc;border-radius:3px;padding:6px;font-size:12px;" placeholder='[{"canonical":"tchibo","synonyms":["чибо"],"antonyms":[]}]'></textarea>
+          </div>
+          <button id="aiImportBtn" class="ctrl-btn" style="background:var(--c-green);color:#fff;border-color:var(--c-green-dark);">📥 Импортировать бренды</button>
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+
+<!-- Brand Edit Modal -->
+<div class="modal-overlay" id="brandEditModal">
+  <div class="modal-box">
+    <div class="modal-title">✏️ Редактирование бренда</div>
+    <input type="hidden" id="beEditKey">
+    <div class="modal-field"><label>Канонический бренд</label><input type="text" id="beCanon" placeholder="Например: tchibo"></div>
+    <div class="modal-field"><label>Синонимы (по одному на строке или через запятую)</label><textarea id="beSyns" rows="3" placeholder="чибо&#10;тчибо&#10;тибио"></textarea></div>
+    <div class="modal-field"><label>Антонимы (по одному на строке или через запятую)</label><textarea id="beAnti" rows="2" placeholder="nescafe&#10;jacobs"></textarea></div>
+    <div class="modal-actions">
+      <button onclick="closeBrandEditModal()">Отмена</button>
+      <button class="primary-btn" onclick="brandSaveEdit()">💾 Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Brand Add Modal -->
+<div class="modal-overlay" id="brandAddModal">
+  <div class="modal-box">
+    <div class="modal-title">➕ Добавить новый бренд</div>
+    <div class="modal-field"><label>Канонический бренд</label><input type="text" id="baCanon" placeholder="Например: tchibo"></div>
+    <div class="modal-field"><label>Синонимы (по одному на строке или через запятую)</label><textarea id="baSyns" rows="3" placeholder="чибо&#10;тчибо"></textarea></div>
+    <div class="modal-field"><label>Антонимы (по одному на строке или через запятую)</label><textarea id="baAnti" rows="2" placeholder="nescafe"></textarea></div>
+    <div class="modal-actions">
+      <button onclick="closeBrandAddModal()">Отмена</button>
+      <button class="primary-btn" id="brandAddBtn">💾 Добавить</button>
+    </div>
+  </div>
+</div>
+
+<!-- BC Add Modal -->
+<div class="modal-overlay" id="bcAddModal">
+  <div class="modal-box">
+    <div class="modal-title">📚 Добавить штрихкоды в базу</div>
+    <div class="modal-field">
+      <label>Главный штрихкод</label>
+      <input type="text" id="bcMainInput" readonly style="background:#f8f8f8;font-family:monospace;">
+    </div>
+    <div class="modal-field">
+      <label>Название товара</label>
+      <input type="text" id="bcNameInput" placeholder="Введите название...">
+    </div>
+    <div class="modal-field">
+      <label>Штрихкоды поставщиков (отметьте синонимы):</label>
+      <div id="bcSynonymsList" style="max-height:200px;overflow-y:auto;margin-top:5px;"></div>
+    </div>
+    <div class="modal-actions">
+      <button onclick="closeBcAddModal()">Отмена</button>
+      <button class="primary-btn" onclick="saveBcAddModal()">📚 Сохранить в базу</button>
+    </div>
+  </div>
+</div>
+
+<!-- Match Confirm Modal -->
+<div class="modal-overlay" id="matchConfirmModal">
+  <div class="modal-box" style="max-width:600px;">
+    <div class="modal-title">🔗 Подтвердить связь</div>
+    <div class="modal-tabs">
+      <button class="modal-tab active" id="mcTabSyn" onclick="mcSwitchTab('syn')">🔗 Синоним ШК</button>
+      <button class="modal-tab" id="mcTabBrand" onclick="mcSwitchTab('brand')">🏷️ Бренд</button>
+    </div>
+    <div class="modal-pane active" id="mcPaneSyn">
+      <div id="mcSimInfo" style="font-size:12px;color:#555;margin-bottom:10px;"></div>
+      <table class="pairs-table" id="mcPairsTable"></table>
+      <div class="modal-actions">
+        <button onclick="closeMatchConfirmModal()">Отмена</button>
+        <button class="primary-btn" id="mcOkBtn" onclick="confirmMatchAction()">✅ Подтвердить</button>
+      </div>
+    </div>
+    <div class="modal-pane" id="mcPaneBrand">
+      <div class="modal-field"><label>Канонический бренд</label><input type="text" id="mcbCanon" placeholder="Название бренда"></div>
+      <div class="modal-field"><label>Синонимы</label><textarea id="mcbSyns" rows="2"></textarea></div>
+      <div class="modal-field"><label>Антонимы</label><textarea id="mcbAnti" rows="2"></textarea></div>
+      <div style="font-size:11px;color:#888;margin-bottom:8px;" id="mcbSuggestions"></div>
+      <div class="modal-actions">
+        <button onclick="closeMatchConfirmModal()">Отмена</button>
+        <button class="primary-btn" id="mcbSaveBtn">💾 Сохранить бренд</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Dialog Modal -->
+<div class="modal-overlay" id="jeConfirmModal">
+  <div class="modal-box" style="max-width:400px;">
+    <div class="modal-title" id="jeConfirmTitle">Подтверждение</div>
+    <div id="jeConfirmMsg" style="font-size:13px;margin-bottom:14px;"></div>
+    <div class="modal-actions">
+      <button id="jeConfirmNo">Отмена</button>
+      <button class="primary-btn" id="jeConfirmYes">Подтвердить</button>
+    </div>
+  </div>
+</div>
+
+<!-- XLS Import Mode Modal -->
+<div class="modal-overlay" id="jeXlsModal">
+  <div class="modal-box" style="max-width:380px;">
+    <div class="modal-title">📤 Режим импорта Excel</div>
+    <p style="font-size:12px;color:#555;margin-bottom:14px;">Выберите как совместить импортируемые данные с существующей базой:</p>
+    <div class="modal-actions" style="flex-direction:column;gap:8px;">
+      <button style="width:100%;padding:9px;border-radius:3px;border:1px solid #ccc;background:#fce8e6;cursor:pointer;" onclick="jeXlsModalClose('overwrite')">🗑 Перезаписать (очистить и заменить)</button>
+      <button style="width:100%;padding:9px;border-radius:3px;border:1px solid #ccc;background:#fff;cursor:pointer;" onclick="jeXlsModalClose('skip')">⏭ Пропустить (добавить только новые)</button>
+      <button style="width:100%;padding:9px;border-radius:3px;border:1px solid #ccc;background:#eaf4ee;cursor:pointer;" onclick="jeXlsModalClose('merge')">🔀 Объединить синонимы</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tutorial Tooltip -->
+<div id="tutorialTooltip"></div>
+
+<!-- Toast Area -->
+<div id="jeToastArea"></div>
+
+<!-- Application Scripts (ES Modules) -->
+<script type="module" src="js/app.js"></script>
+
+</body>
+</html>
